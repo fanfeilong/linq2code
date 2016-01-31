@@ -5,7 +5,7 @@ read and write code on the fly
 Example
 =======
 
-1. Prepare meta data
+1. Prepare meta data, or DSL 
 ```
 const string className = "Example";
 var members = new Dictionary<string,string>{
