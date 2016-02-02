@@ -2,23 +2,7 @@ linq2code
 
 read and write code on the fly
 
-Example
-=======
-
-<<<<<<< HEAD
-1. Prepare meta data, or DSL 
-```
-const string className = "Example";
-var members = new Dictionary<string,string>{
-    {"id","int"},
-    {"name","string"}
-};
-```
-=======
 ## Test Each
-#### Source Code:
->>>>>>> add switch-case and if-esle struct
-
 ```
 private static void TestEach(){
     // Prepare meta data
@@ -121,7 +105,6 @@ public:
     }
 
 }
-// End
 // End
 ```
 
@@ -232,8 +215,6 @@ static void TestIfElse(){
     Console.WriteLine(code.ToString());
 }
 ```
-<<<<<<< HEAD
-=======
 
 #### Dest Code:
 
@@ -245,4 +226,3 @@ else
     else if
 // End
 ```
->>>>>>> add switch-case and if-esle struct
