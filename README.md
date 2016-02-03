@@ -70,7 +70,7 @@ class Example
 {
 private:
     int m_id;
-    int m_id;
+    string m_name;
 
 public:
     Example()
@@ -94,14 +94,14 @@ public:
         m_id = v;
     }
 
-    const int& get_id()const
+    const string& get_name()const
     {
-        return m_id;
+        return m_name;
     }
 
-    void set_id(const int& v)
+    void set_name(const string& v)
     {
-        m_id = v;
+        m_name = v;
     }
 
 }
@@ -174,7 +174,7 @@ int test(int i)
         case 1:
             int i=1;
             break;
-        case 1:
+        case 2:
             int x=2;
             break;
         default:

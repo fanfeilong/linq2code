@@ -16,11 +16,8 @@ namespace test {
             // Prepare meta data
             const string className = "Example";
             var members = new Dictionary<string, string>{
-                    {
-                            "id", "int"
-                    },{
-                            "name", "string"
-                    }
+                {"id", "int"},
+                {"name", "string"}
             };
 
             // Generate CPP class

@@ -55,11 +55,15 @@ namespace System.Linq.Code {
             private set;
         }
 
-        public PP End() {
+        public PP End(){
+            var list=List;
+            var concats=Concats;
             Privous.AddSubConcat((sb, p) => {
-                foreach (var item in List) {
-                    foreach (var concat in Concats) {
-                        concat(sb, item);
+                foreach (var item in list) {
+                    var currentItem=item;
+                    foreach (var concat in concats) {
+                        var currentConncat=concat;
+                        currentConncat(sb, currentItem);
                     }
                 }
             });

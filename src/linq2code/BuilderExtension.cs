@@ -52,13 +52,15 @@ public static class BuilderExtension {
 
         var lb=new LineBuilder<int, P, Builder<P, PP, PPP>>(b, null);
         var currentIndent=indent;
+        
 
         var c=new Action<StringBuilder, int>((sb, p) => {
             var space=new string(' ', currentIndent*tabSize);
+            var currentFormat=format;
             if (objs.Length>0) {
-                sb.Append(space).AppendFormat(format, objs).AppendLine();
+                sb.Append(space).AppendFormat(currentFormat, objs).AppendLine();
             } else {
-                sb.Append(space).Append(format).AppendLine();
+                sb.Append(space).Append(currentFormat).AppendLine();
             }
         });
 
@@ -73,18 +75,20 @@ public static class BuilderExtension {
 
         var lb=new LineBuilder<T, P, Builder<P, PP, PPP>>(b, selector);
         var currentIndent=indent;
+        
+
         lb.AddConcat((sb, v) => {
             var space=new string(' ', currentIndent*tabSize);
-
-            format=format.Replace("{0}", v.ToString());
+            var currentFormat=format;
+            currentFormat=currentFormat.Replace("{0}", v.ToString());
             for (int i=0; i<objs.Length; i++) {
-                format=format.Replace(string.Format("{{{0}}}", i+1), string.Format("{{{0}}}", i));
+                currentFormat=currentFormat.Replace(string.Format("{{{0}}}", i+1), string.Format("{{{0}}}", i));
             }
 
             if (objs.Length>0) {
-                sb.Append(space).AppendFormat(format, objs).AppendLine();
+                sb.Append(space).AppendFormat(currentFormat, objs).AppendLine();
             } else {
-                sb.Append(space).Append(format).AppendLine();
+                sb.Append(space).Append(currentFormat).AppendLine();
             }
         });
         return lb.End();
@@ -101,20 +105,23 @@ public static class BuilderExtension {
         //
         var lb=new LineBuilder<P, P, Builder<P, PP, PPP>>(b, passtor);
         var currentIndent=indent;
+        
+
         lb.AddConcat((sb, p) => {
             var space=new string(' ', currentIndent*tabSize);
 
-            format=format.Replace("{0}", selector1(p).ToString());
-            format=format.Replace("{1}", selector2(p).ToString());
+            var currentFormat=format;
+            currentFormat=currentFormat.Replace("{0}", selector1(p).ToString());
+            currentFormat=currentFormat.Replace("{1}", selector2(p).ToString());
 
             for (int i=1; i<objs.Length; i++) {
-                format=format.Replace(string.Format("{{{0}}}", i+1), string.Format("{{{0}}}", i-1));
+                currentFormat=currentFormat.Replace(string.Format("{{{0}}}", i+1), string.Format("{{{0}}}", i-1));
             }
 
             if (objs.Length>0) {
-                sb.Append(space).AppendFormat(format, objs).AppendLine();
+                sb.Append(space).AppendFormat(currentFormat, objs).AppendLine();
             } else {
-                sb.Append(space).Append(format).AppendLine();
+                sb.Append(space).Append(currentFormat).AppendLine();
             }
         });
         return lb.End();
@@ -128,25 +135,26 @@ public static class BuilderExtension {
         where PPP : class {
 
         Func<P, P> passtor=p => p;
+        
 
         //
         var lb=new LineBuilder<P, P, Builder<P, PP, PPP>>(b, passtor);
         var currentIndent=indent;
         lb.AddConcat((sb, p) => {
             var space=new string(' ', currentIndent*tabSize);
-
-            format=format.Replace("{0}", selector1(p).ToString());
-            format=format.Replace("{1}", selector2(p).ToString());
-            format=format.Replace("{2}", selector3(p).ToString());
+            var currentFormat=format;
+            currentFormat=currentFormat.Replace("{0}", selector1(p).ToString());
+            currentFormat=currentFormat.Replace("{1}", selector2(p).ToString());
+            currentFormat=currentFormat.Replace("{2}", selector3(p).ToString());
 
             for (int i=2; i<objs.Length; i++) {
-                format=format.Replace(string.Format("{{{0}}}", i+1), string.Format("{{{0}}}", i-2));
+                currentFormat=currentFormat.Replace(string.Format("{{{0}}}", i+1), string.Format("{{{0}}}", i-2));
             }
 
             if (objs.Length>0) {
-                sb.Append(space).AppendFormat(format, objs).AppendLine();
+                sb.Append(space).AppendFormat(currentFormat, objs).AppendLine();
             } else {
-                sb.Append(space).Append(format).AppendLine();
+                sb.Append(space).Append(currentFormat).AppendLine();
             }
         });
         return lb.End();
@@ -182,27 +190,24 @@ public static class BuilderExtension {
     }
 
     public static PP End<T, P, PP>(this Builder<T, P, PP> b) where PP : class {
-        EachBuilder<T, P, PP> eb=b as EachBuilder<T, P, PP>;
+        var lb=b as LineBuilder<T, P, PP>;
+        if (lb!=null) {
+            return lb.End();
+        }
+
+        var eb=b as EachBuilder<T, P, PP>;
         if (eb!=null) {
-            //"=>EachBuilder End.".Dump();
             return eb.End();
         }
 
-        SwitchBuilder<T, P, PP> swb=b as SwitchBuilder<T, P, PP>;
+        var swb=b as SwitchBuilder<T, P, PP>;
         if (swb!=null) {
-            //"=>SwitchBuilder End.".Dump();
             return swb.End();
         }
 
-        IfBuilder<T, P, PP> ifb=b as IfBuilder<T, P, PP>;
+        var ifb=b as IfBuilder<T, P, PP>;
         if (ifb!=null) {
             return ifb.End();
-        }
-
-        LineBuilder<T, P, PP> lb=b as LineBuilder<T, P, PP>;
-        if (lb!=null) {
-            //"=>LineBuilder End.".Dump();
-            return lb.End();
         }
 
         Debug.Assert(false);
