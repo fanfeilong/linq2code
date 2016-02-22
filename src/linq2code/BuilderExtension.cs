@@ -40,9 +40,7 @@ public static class BuilderExtension {
 
     public static Builder<P, PP, PPP> Line<P, PP, PPP>(this Builder<P, PP, PPP> b) where PPP : class {
         var lb=new LineBuilder<int, P, Builder<P, PP, PPP>>(b, null);
-        lb.AddConcat((sb, v) => {
-            sb.AppendLine();
-        });
+        lb.AddConcat((sb, v) => sb.AppendLine());
         return lb.End();
     }
 

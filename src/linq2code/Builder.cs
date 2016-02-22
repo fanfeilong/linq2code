@@ -3,12 +3,12 @@ using System.Diagnostics;
 using System.Text;
 
 namespace System.Linq.Code {
-    public interface IBuilder<T> {
+    public interface IBuilder<out T> {
         void AddConcat(Action<StringBuilder, T> concat);
         void AddSubConcat(Action<StringBuilder, T> concat);
     }
 
-    public interface IPrivoisBuilder<P> {
+    public interface IPrivoisBuilder<out P> {
         IBuilder<P> GetPrivousBuilder();
     }
 
@@ -19,8 +19,8 @@ namespace System.Linq.Code {
         }
         protected IBuilder<P> Privous;
 
-        public Builder(IBuilder<P> privous) {
-            Concats=new List<System.Action<System.Text.StringBuilder, T>>();
+        protected Builder(IBuilder<P> privous) {
+            Concats=new List<Action<StringBuilder, T>>();
             Privous=privous;
         }
 
@@ -77,15 +77,15 @@ namespace System.Linq.Code {
     }
 
     public class SwitchBuilder<T, P, PP> : Builder<T, P, PP> where PP : class {
-        private Func<P, T> Selector;
+        private readonly Func<P, T> Selector;
 
         private Dictionary<T, List<Action<StringBuilder, T>>> Cases {
             get;
             set;
         }
 
-        bool isDefault=false;
-        private List<Action<StringBuilder, T>> Defaults;
+        bool isDefault;
+        private readonly List<Action<StringBuilder, T>> Defaults;
 
         private T CurrentCase {
             get;
@@ -140,20 +140,16 @@ namespace System.Linq.Code {
             : base(privous) {
             Selector=selector;
             Cases=new Dictionary<T, List<Action<StringBuilder, T>>>();
-            Defaults=new List<System.Action<System.Text.StringBuilder, T>>();
+            Defaults=new List<Action<StringBuilder, T>>();
         }
     }
 
     public class LineBuilder<T, P, PP> : Builder<T, P, PP> where PP : class {
-        private Func<P, T> Selector;
+        private readonly Func<P, T> Selector;
         public PP End() {
             Privous.AddSubConcat((sb, p) => {
                 foreach (var concat in Concats) {
-                    if (Selector!=null) {
-                        concat(sb, Selector(p));
-                    } else {
-                        concat(sb, default(T));
-                    }
+                    concat(sb, Selector != null ? Selector(p) : default(T));
                 }
             });
             
@@ -166,11 +162,11 @@ namespace System.Linq.Code {
     }
 
     public class IfBuilder<T, P, PP> : Builder<T, P, PP> where PP : class {
-        private Func<P, T> Selector;
+        private readonly Func<P, T> Selector;
         private bool isElse;
-        private List<Action<StringBuilder, T>> Ifs;
-        private List<Action<StringBuilder, T>> Elses;
-        private T Value;
+        private readonly List<Action<StringBuilder, T>> Ifs;
+        private readonly List<Action<StringBuilder, T>> Elses;
+        private readonly T Value;
 
         public IfBuilder<T, P, PP> Else() {
             isElse=true;
@@ -202,8 +198,8 @@ namespace System.Linq.Code {
             : base(privous) {
             Value=value;
             Selector=selector;
-            Ifs=new List<System.Action<System.Text.StringBuilder, T>>();
-            Elses=new List<System.Action<System.Text.StringBuilder, T>>();
+            Ifs=new List<Action<StringBuilder, T>>();
+            Elses=new List<Action<StringBuilder, T>>();
         }
     }
 }
