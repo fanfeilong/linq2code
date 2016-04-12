@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq.Code;
 
 namespace test {
-    class Program {
-        static void Main(string[] args){
+    internal class Program {
+        private static void Main(){
             TestEach();
             TestSwitchCase();
             TestIfElse();
@@ -66,7 +65,7 @@ namespace test {
             Console.WriteLine(code.ToString());
         }
 
-        static void TestSwitchCase(){
+        private static void TestSwitchCase(){
             var code=new TextBuilder();
 
             var numbers=new[]{
@@ -116,8 +115,7 @@ namespace test {
             Console.WriteLine(code.ToString());
         }
 
-        static void TestIfElse(){
-
+        private static void TestIfElse(){
             var code=new TextBuilder();
 
             code.ConfigTab(4)
