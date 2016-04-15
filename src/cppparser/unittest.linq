@@ -66,7 +66,7 @@ public static class u {
 	}
 	public static void TestEatParentheses() {
 		split();
-		var shouldSkip = "  \r\n(\r\nadjflakfjlajk(asfd  \r\naf\r\n(adfafa)a))";
+		var shouldSkip = "  \r\n(\r\nadjflakf       \r\n     jlajk(asfd  \r\naf\r\n(adfafa)a))";
 		var str = string.Format("{0}  adfa\r\n", shouldSkip);
 
 		int index = 0;
@@ -97,78 +97,64 @@ public static class EatExtension {
 		bool hint = false;
 		var sb = new StringBuilder();
 		var lastspace = false;
-		if (i < count) {
-			var stack = new Stack<char>();
+		if (i >= count) {
+			return null;
+		}
+		var stack = new Stack<char>();
 
-			while (true) {
-
-				if (i >= count) break;
-
-				var c = str[i++];
-				skipCount++;
-
-				bool error = false;
-				switch (c) {
-					case '(':
-						sb.Append(c);lastspace=false;
-						stack.Push(c);
-
-						skipCount += str.Skip(ref i, cc => {
-							var valid = cc != '(' && cc != ')';
-							if (valid) {
-								if (cc.IsSpaceOrNewLine()) {
-									if (keepspaceornewline ) {
-										sb.Append(cc);
-									} else {
-										if (lastspace == false) {
-											sb.Append(' ');
-											lastspace = true;
-										}
-									}
-								} else {
-									sb.Append(cc);lastspace = false;
-								}
-							}
-							return valid;
-						});
-						break;
-					case ')':
-						sb.Append(c);lastspace=false;
-						if (stack.Count > 0) {
-							stack.Pop();
-							if (stack.Count > 0) {
-								skipCount += str.Skip(ref i, cc => {
-									var valid = cc != '(' && cc != ')';
-									if (valid) {
-										if (cc.IsSpaceOrNewLine()) {
-									if (keepspaceornewline ) {
-										sb.Append(cc);
-									} else {
-										if (lastspace == false) {
-											sb.Append(' ');
-											lastspace = true;
-												}
-											}
-										} else {
-											sb.Append(cc); lastspace = false;
-										}
-									}
-									return valid;
-								});
-							} else {
-								hint = true;
-							}
+		var skipNonParentheses = new Action(() => {
+			skipCount += str.Skip(ref i, cc => {
+				var valid = cc != '(' && cc != ')';
+				if (valid) {
+					if (cc.IsSpaceOrNewLine()) {
+						if (keepspaceornewline) {
+							sb.Append(cc);
 						} else {
-							error = true;
+							if (lastspace == false) {
+								sb.Append(' ');
+								lastspace = true;
+							}
 						}
-						break;
-					default:
-						error = true;
-						break;
+					} else {
+						sb.Append(cc); lastspace = false;
+					}
 				}
-				if (error || hint) {
+				return valid;
+			});
+		});
+
+		while (true) {
+
+			if (i >= count) break;
+			var c = str[i++];
+			skipCount++;
+			bool error = false;
+			switch (c) {
+				case '(':
+					sb.Append(c); lastspace = false;
+					stack.Push(c);
+					skipNonParentheses();
 					break;
-				}
+				case ')':
+					sb.Append(c); lastspace = false;
+					if (stack.Count > 0) {
+						stack.Pop();
+						if (stack.Count > 0) {
+							skipNonParentheses();
+						} else {
+							hint = true;
+						}
+					} else {
+						error = true;
+					}
+					break;
+				default:
+					error = true;
+					break;
+			}
+
+			if (error || hint) {
+				break;
 			}
 		}
 
