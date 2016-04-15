@@ -1,5 +1,4 @@
 <Query Kind="Program">
-  <Output>DataGrids</Output>
   <Reference>&lt;RuntimeDirectory&gt;\System.Windows.Forms.dll</Reference>
   <Namespace>System.Drawing</Namespace>
   <Namespace>System.Windows.Forms</Namespace>
@@ -7,12 +6,15 @@
 </Query>
 
 void Main() {
+	u.TestBuffer();
+	u.TestEatBlanceGroup();
+	u.TestLexer();
 	u.TestCodeBase();
 }
 
 public static class u {
 	public static void TestCodeBase() {
-		var root = @"c:\src\";
+		var root = @"c:\src\codebase\";
 		var codebase = new CodeBase(root);
 
 		var blocks = codebase.Compile();
@@ -21,8 +23,41 @@ public static class u {
 		var classes = blocks.Link();
 		classes.Dump("classes");
 	}
+	public static void TestLexer() {
+		var root = @"c:\src\testcase\";
 
+		var files = root.GetAllFileNames("*.cpp");
+		var step = 30;
+		var start = step * 5;
+		var length = Math.Min(files.Count().Dump("totollength") - start, step);
 
+		foreach (var file in files.Skip(start).Take(length)) {
+			var lexer = new LexerState(file);
+			var tokens = lexer.Next();
+			tokens.Dump(Path.GetFileName(file));
+		}
+	}
+	public static void TestBuffer() {
+		var l = new LexerState("");
+		var strs = new[] { 
+			"123+-*/(){}[(<>)]++++---<<<< <>>>> >====== = \r\n&&&&&& & %~ ; ;;;; ,,, ^^^^^^ ^",
+			" ++c ++",
+			"<<<< <>>>> >"
+		};
+		foreach (var str in strs) {
+			l.ResetBuffer();
+			foreach (var c in str) {
+				l.BufferNew(c);
+			}
+			l.ShowLine();
+		}
+	}
+	public static void TestEatBlanceGroup() {
+		var str = "\"    fadsf   \' \'  \' \r\n    sa\"";
+		int i=0;
+		var r= str.EatEspaceChar(ref i,'"',true);
+		r.Dump();
+	}
 }
 
 // Define other methods and classes here
@@ -292,6 +327,7 @@ public class LexerState {
 
 	public int TabSize { get; private set;}
 	public List<string> Lines { get; set; }
+	public StringBuilder Word { get; set; }
 	public StringBuilder Line { get; set; }
 	public string Indent {
 		get {
@@ -310,8 +346,6 @@ public class LexerState {
 	public char LastNonWhiteSpace { get; set;}
 
 	public string LastLine { get; set; }
-	public bool KeepNewLineOnce { get; set; }
-	public bool KeepMacroLines { get; set; }
 	public Stack<int> LastClassLevels { get; set;}
 	
 	public bool HasKeyword = false;
@@ -345,7 +379,7 @@ public class LexerState {
 		if (beg<Count && end<Count && beg>=0 && end>=0) {
 			return Code.Substring(beg, end - beg);
 		} else {
-			Debug.Assert(false,"ERROR: Peek overflow.");
+			Debug.Assert(false,string.Format("ERROR: Peek overflow. {0}",FullFileName));
 			return "";
 		}
 	}
@@ -396,8 +430,8 @@ public class LexerState {
 	
     public string FullFileName { get; private set; }
     public LexerState(string file) {
-		KeepNewLineOnce = false;
 		Line = new StringBuilder();
+		Word = new StringBuilder();
 		Lines = new List<string>();
 		FullFileName = file;
 		TabSize = 4;
@@ -413,8 +447,31 @@ public class LexerState {
 		this.Code = File.ReadAllText(FullFileName);
 		return this;
 	}
-	
-	public Stack<int> levels; 	
+
+	public Stack<int> levels;
+	// can be split
+	public readonly char[] spaceTokens = new[]{
+		'(', ')', '[', ']', '{', '}',
+		';', ','
+	};
+
+	// maybe continue
+	// ----------------------------------------
+	// TODO: 
+	// i-->5;
+	// p->test();
+	// p.->test();
+	public readonly char[] spaceTokens2 = new[]{
+		'+','-','/', '*', '^', '%','~',
+		'>','<',
+		'|','&',
+		'=',
+		':','!',
+	};
+
+	public char last = char.MinValue;
+	public bool lastescape = false;
+	public bool enterstr = false;
 }
 
 public class ParserState {
@@ -465,80 +522,180 @@ public static class LexerBufferExtension {
 		l.level = l.levels.Pop();
 		return l;
 	}
+
+	private static LexerState AddLine(this LexerState l, string newLine) {
+		if (!string.IsNullOrWhiteSpace(newLine)) {
+			newLine = newLine.TrimEnd().Replace(' ', '@');
+			l.Lines.Add(newLine);
+		}
+		return l;
+	}	
 	public static LexerState Save(this LexerState l) {
 		if (l.Lines.Count > 0) {
 			l.LastLine = l.Lines.Last();
 		}
-
-		var str = l.Line.ToString();
-		if (!string.IsNullOrWhiteSpace(str)) {
-			var newLine = string.Format("{0}{1}", l.Indent, str);
-			l.Lines.Add(newLine);
+		l.BufferWord();
+		if (l.Line.Length>0) {
+			var newLine = string.Format("{0}{1}", l.Indent, l.Line.ToString());
+			l.AddLine(newLine);
 		}
-
 		l.Line.Clear();
 		return l;
 	}
 	public static LexerState SaveNew(this LexerState l, string format, params object[] args) {
 		if (l.Lines.Count > 0) {
 			l.LastLine = l.Lines.Last();
+			Debug.Assert(l.Line.Length==0,"ERROR: SaveNew iff L.Line is empty.");
 		}
+		
+		string newLine = null;
 		if (args.Length > 0) {
-			var newLine = string.Format("{0}{1}", l.Indent, string.Format(format, args));
-			l.Lines.Add(newLine);
+			newLine = string.Format("{0}{1}", l.Indent, string.Format(format, args));
 		} else {
-			var newLine = string.Format("{0}{1}", l.Indent, format);
-			l.Lines.Add(newLine);
+			newLine = string.Format("{0}{1}", l.Indent, format);
 		}
+
+		l.AddLine(newLine);
 
 		return l;
 	}
 
-	private static bool CanBuffer(this LexerState l, char c) {
-		if (c.IsSpace()) {
-			if (l.Line.Length == 0) {
+	public static LexerState ResetBuffer(this LexerState l) {
+		l.Word.Clear();
+		l.Line.Clear();
+		return l;
+	}
+	public static LexerState ShowLine(this LexerState l) {
+		l.BufferWord();
+		("'"+l.Line.ToString().Replace(' ','@')+"'").Dump();
+		return l;
+	}
+
+	private static bool CanBufferSpace(this StringBuilder b){
+		if (b.Length == 0) {
+			return false;
+		} else {
+			var last = b[b.Length - 1];
+			if (last.IsSpace()||last=='.'||last=='~') {
 				return false;
 			} else {
-				var last = l.Line[l.Line.Length - 1];
-				if (last.IsSpace()) {
-					return false;
-				} else {
-					return true;
-				}
+				return true;
 			}
-		} else {
-			return true;
 		}
 	}
-	
-	public static LexerState Buffer(this LexerState l) {
-		if (l.CanBuffer(l.Current)) {
-			l.Line.Append(l.Current);
-		} else {
-			
+
+	private static void BufferSpace(this LexerState l) {
+		if (l.Line.CanBufferSpace()||l.enterstr) {
+			l.Line.Append(' ');
 		}
+	}
+	private static void BufferWord(this LexerState l) {
+		if (l.Word.Length > 0) {
+			l.BufferSpace();
+			for (int i = 0; i < l.Word.Length; i++) {
+				var cc = l.Word[i];
+				l.Line.Append(cc);
+			}
+			l.BufferSpace();
+			l.Word.Clear();
+		}
+	}
+	private static bool change(this char left, char right) {
+		if (left != right) {
+			if (left == '-' && right == '>') {
+				return false;
+			} else if(left=='+'&&right=='='){
+				return false;
+			} else if (left == '-' && right == '=') {
+				return false;
+			} else if (left == '*' && right == '=') {
+				return false;
+			} else if (left == '/' && right == '=') {
+				return false;
+			} else if (left == '%' && right == '=') {
+				return false;
+			} else if (left == '~' && right == '=') {
+				return false;
+			} else if (left == '|' && right == '=') {
+				return false;
+			} else if (left == '&' && right == '=') {
+				return false;
+			} else if (left == '!' && right == '=') {
+				return false;
+			} else {
+				return true;
+			}
+		} else {
+			return false;
+		}
+	}
+	private static void BufferNonSpace(this LexerState l, char c) {
+		if (c == '\\') {
+			l.lastescape = true;
+		} else if (c == '"') {
+			if (!l.lastescape) {
+				l.enterstr = !l.enterstr;
+			}
+		}
+		
+		if (l.enterstr) {
+			l.Line.Append(c);
+		} else {
+			if (l.last.change(c)) {
+				l.BufferWord();
+			} 
+
+			if (l.spaceTokens.Contains(c)) {
+				l.BufferSpace();
+				l.Line.Append(c);
+				l.BufferSpace();
+			} else if (!l.spaceTokens2.Contains(c)) {
+				l.Line.Append(c);
+			} else {
+				l.Word.Append(c);
+			}
+		}
+		
+		l.last = c;
+	}
+
+	private static void BufferInternal(this LexerState l, char c) {
+		Debug.Assert(!c.IsNewLine(),"WARNING: SHOULD NOT buffer a newline.");
+		if (c.IsSpace()) {
+			l.lastescape = false;
+			l.BufferWord();
+			l.BufferSpace();
+		} else {
+			l.BufferNonSpace(c);
+		}
+	}
+
+	public static LexerState Buffer(this LexerState l) {
+		l.BufferInternal(l.Current);
 		return l;
 	}
 	public static LexerState BufferNew(this LexerState l, char c) {
-		if (l.CanBuffer(c)) {
-			l.Line.Append(c);
-		}
+		l.BufferInternal(c);
 		return l;
 	}
 	public static LexerState BufferNew(this LexerState l, string format, params object[] args) {
+		string str;
 		if (args.Length > 0) {
-			l.Line.AppendFormat(format, args);
+			str = string.Format(format, args);
 		} else {
-			l.Line.Append(format);
+			str = format;
+		}
+
+		foreach (var c in str) {
+			l.BufferNew(c);
 		}
 		return l;
 	}
 	public static LexerState BufferKeyword(this LexerState l, string keyword) {
 		l.HasKeyword = true;
-//		if (keyword.Contains("typedef")) {
-//			int d=0;
-//		}
+		l.BufferNew(' ');
 		l.Line.Append(keyword);
+		l.BufferNew(' ');
 		return l;
 	}
 
@@ -631,6 +788,7 @@ public static class LexerTokenExtension {
 		}
 
 		l.Current = l.Code[l.next - 1];
+		//l.ShowLine();
 		l.Save();
 		return true;
 	}
@@ -706,12 +864,15 @@ public static class LexerTokenExtension {
 			var headcount = (lookup[3] == '(' ? 3 : 4);
 			int i = l.next + headcount;
 			var compress = true;
-			var r = l.Code.EatParentheses(ref i, compress);
+			var r = l.Code.EatBlanceGroup(ref i,'(',')', compress);
 			if (r != null) {
 				var skipValue = r.Item2;
 				var skipCount = r.Item1 + headcount;
-
-				l.SaveNew("for{0}", skipValue);
+				
+				//l.SaveNew("for{0}", skipValue);
+				l.Save();
+				l.BufferNew("for{0}", skipValue);
+				l.Save();
 				l.next += skipCount;
 				return true;
 			}
@@ -737,11 +898,10 @@ public static class LexerTokenExtension {
 		var r = l.PeekMatch(keywords);
 		if (r != null) {
 			l.Save();
-			if (r.Contains("#define")) {
-				int d = 0;
-			}
 			l.BufferNew(r);
 			l.next += r.Length;
+			
+			l.enterstr = true;
 
 			// eat until newline
 			var lastdiv = false;
@@ -774,6 +934,7 @@ public static class LexerTokenExtension {
 							last = char.MinValue;
 						}
 						l.BufferNew(c);
+						//sb.Append(c);
 					}
 				}
 				return valid;
@@ -784,11 +945,10 @@ public static class LexerTokenExtension {
 				l.Current = '/';
 				var skipCount = l.PassComment();
 			}
-
+			
+			l.enterstr = false;
+			
 			// save the line
-			if (r.Contains("#define")) {
-				l.Line.ToString().Dump();
-			}
 			l.Save();
 
 			return true;
@@ -862,22 +1022,45 @@ public static class LexerTokenExtension {
 
 		return false;
 	}
+	public static bool PassString(this LexerState l) {
+		Debug.Assert(l.Current == '"', "ERROR: l.Current SHOULD be '\"'");
+		var compress = false;
+		int i = l.next-1;
+		var r = l.Code.EatEspaceChar(ref i,'"',compress);
+		if (r != null) {
+			var skipValue = r.Item2;
+			var skipCount = r.Item1-1;
+			
+			l.BufferNew(skipValue);
+			l.next += skipCount;
+			return true;
+		}
+		return false;
+	}
 }
 
 public static class LexerExtension {
 	public static IEnumerable<string> Next(this LexerState l) {
 		l.Prepare();
 		while (l.Step()) {
-			var keepNewLineOnce = l.KeepNewLineOnce;
 
 			if (!l.Current.IsSpaceOrNewLine()) {
 				l.LastNonWhiteSpace = l.Current;
 			}
-
+			//l.ShowLine();
 			foreach (var lt in l.Lines) {
 				yield return lt;
 			}
 			l.Lines.Clear();
+
+			if (l.Current == '"') {
+				if(!l.PassString()) {
+					Debug.Assert(false, "ERROR: PassString Failed.");
+					break;
+				} else {
+					continue;
+				}
+			}
 
 			if (l.Current == '{') {
 				if (!l.PassLeftBrace()) {
@@ -913,7 +1096,7 @@ public static class LexerExtension {
 			}
 
 			if (l.Current.IsNewLine() || l.next == 1) {
-				l.Current.Dump();
+				//l.Current.Dump();
 				if (l.PassBlankLines()) {
 					continue;
 				} else {
@@ -921,7 +1104,6 @@ public static class LexerExtension {
 						l.Step();
 					}
 				}
-				l.Current.Dump();
 			}
 
 			if (l.Current.IsSpace()) {
@@ -938,20 +1120,24 @@ public static class LexerExtension {
 
 				if (l.Current.IsNewLine()) {
 					l.PassBlankLines();
-				} 
-				continue;
+					l.BufferNew(' ');
+					continue;
+				}
+
+				if (l.Current.IsSpace()) {
+					l.Buffer();
+					continue;
+				}
+				
+				Debug.Assert(false,"Space or NewLine SHOULD be eaten.");
 			}
-			if (l.Current == 'f') {
-				int d = 0;
-			}
-			l.Current.Dump();
+
 			l.Step(-1);
 			if (l.PassPackage()) {
 				continue;
 			}
-			l.Current.Dump();
 			l.Step();
-
+			
 			l.Buffer();
 		}
 		foreach (var lt in l.Lines) {
@@ -962,7 +1148,69 @@ public static class LexerExtension {
 }
 
 public static class EatExtension {
-	public static Tuple<int, string> EatParentheses(this string str, ref int index, bool compress) {
+	public static Tuple<int, string> EatEspaceChar(this string str, ref int index, char e, bool compress) {
+		int i=index;
+		var count = str.Length;
+		var skipCount = 0;
+		
+		if (i > count) return null;
+
+		var sb = new StringBuilder();
+		var lastescape = false;
+		var hint = false;
+
+		Action eatSpace = () => {
+			int j = i;
+			int space = str.SkipSpaceOrNewLine(ref i);
+			if (space > 0) {
+				lastescape = false;
+				if (compress) {
+					sb.Append(' ');
+				} else {
+					sb.Append(str.Substring(j, space));
+				}
+				skipCount += space;
+			}
+		};
+		eatSpace();
+		if(i>=count) return null;
+
+		var c = str[i++];
+		sb.Append(c);
+		skipCount++;
+		Debug.Assert(c==e,string.Format("First NonSpace Char SHOULD be escape char: {0} .",e));
+
+		while (true) {
+			if(i>=count)break;
+			eatSpace();
+			if(i>=count)break;
+			
+			c = str[i++];
+			skipCount++;
+			
+			sb.Append(c);
+			if (c == '\\') {
+				lastescape = true;
+			} else if (c == e) {
+				if (!lastescape) {
+					hint = true;
+					break;
+				} 
+				lastescape = false;
+			} else {
+				lastescape = false;
+			}
+		}
+
+		if (hint) {
+			var eat = sb.ToString();
+			index += skipCount;
+			return Tuple.Create(skipCount, eat);
+		} else {
+			return null;
+		}
+	}
+	public static Tuple<int, string> EatBlanceGroup(this string str, ref int index,char left, char right, bool compress) {
 		var keepspaceornewline = !compress;
 		int skipCount = 0;
 		int i = index;
@@ -978,7 +1226,7 @@ public static class EatExtension {
 
 		var skipNonParentheses = new Action(() => {
 			skipCount += str.Skip(ref i, cc => {
-				var valid = cc != '(' && cc != ')';
+				var valid = cc != left && cc != right;
 				if (valid) {
 					if (cc.IsSpaceOrNewLine()) {
 						if (keepspaceornewline) {
@@ -998,33 +1246,30 @@ public static class EatExtension {
 		});
 
 		while (true) {
-
+			//sb.ToString().Dump();
 			if (i >= count) break;
 			var c = str[i++];
 			skipCount++;
 			bool error = false;
-			switch (c) {
-				case '(':
-					sb.Append(c); lastspace = false;
-					stack.Push(c);
-					skipNonParentheses();
-					break;
-				case ')':
-					sb.Append(c); lastspace = false;
+
+            if (c == left) {
+				sb.Append(c); lastspace = false;
+				stack.Push(c);
+				skipNonParentheses();
+			} else if (c == right) {
+				sb.Append(c); lastspace = false;
+				if (stack.Count > 0) {
+					stack.Pop();
 					if (stack.Count > 0) {
-						stack.Pop();
-						if (stack.Count > 0) {
-							skipNonParentheses();
-						} else {
-							hint = true;
-						}
+						skipNonParentheses();
 					} else {
-						error = true;
+						hint = true;
 					}
-					break;
-				default:
+				} else {
 					error = true;
-					break;
+				}
+			}else{
+				error = true;
 			}
 
 			if (error || hint) {
@@ -1142,35 +1387,46 @@ public static class SkipExtension {
         int count = allText.Length;
 
         while (true) {
-            // skip non star
-            skipCount += allText.SkipInlineNonStar(ref i);
-            if (i < count) {
-                char c = allText[i++];
-                Debug.Assert(c == '*',"must be star!!!");
-                skipCount++;
-
-                // skip continues start
-                skipCount += allText.SkipStar(ref i);
-
-                if (i < count) {
-                    c = allText[i++];
-                    skipCount++;
-
-                    if (c == '/') {
-                        // hint "*/"
-						skipCount+=allText.SkipSpace(ref i);
-						
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            } else {
+			// skip non star
+			var hintstar = false;
+			do {
+				skipCount += allText.SkipInlineNonStar(ref i);
+				if (allText.PeekChar(i) != '*') {
+					hintstar = false;
+					// if not end in line
+					skipCount += allText.SkipNewLine(ref i);
+				} else {
+					hintstar = true;
+				}
+			}while(!hintstar);
+			
+            if (i >= count) {
                 break;
-            }
-        }
+			}
+			
+			char c = allText[i++];
+			Debug.Assert(c == '*', "must be star!!!");
+			skipCount++;
 
-        
+			// skip continues star
+			skipCount += allText.SkipStar(ref i);
+
+			if (i >= count) {
+				break;
+			}
+
+			c = allText[i++];
+			skipCount++;
+
+			if (c == '/') {
+				// hint "*/"
+				skipCount += allText.SkipSpace(ref i);
+
+				break;
+			}
+		}
+
+
 		index += skipCount;
 		
         return skipCount;
