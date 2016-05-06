@@ -1,4 +1,5 @@
 <Query Kind="Program">
+  <Output>DataGrids</Output>
   <Reference>&lt;RuntimeDirectory&gt;\System.Windows.Forms.dll</Reference>
   <Namespace>System.Drawing</Namespace>
   <Namespace>System.Windows.Forms</Namespace>
@@ -6,10 +7,11 @@
 </Query>
 
 void Main() {
-	u.TestBuffer();
-	u.TestEatBlanceGroup();
+	//u.TestBuffer();
+	//u.TestEatBlanceGroup();
 	u.TestLexer();
-	u.TestCodeBase();
+	//u.TestParser();
+	//u.TestCodeBase();
 }
 
 public static class u {
@@ -26,9 +28,9 @@ public static class u {
 	public static void TestLexer() {
 		var root = @"c:\src\testcase\";
 
-		var files = root.GetAllFileNames("*.cpp");
+		var files = root.GetAllFileNames("*.h");
 		var step = 30;
-		var start = step * 5;
+		var start = step * 0;
 		var length = Math.Min(files.Count().Dump("totollength") - start, step);
 
 		foreach (var file in files.Skip(start).Take(length)) {
@@ -36,6 +38,13 @@ public static class u {
 			var tokens = lexer.Next();
 			tokens.Dump(Path.GetFileName(file));
 		}
+	}
+	public static void TestParser() {
+		var root = @"c:\src\testcase\";
+		var codebase = new CodeBase(root);
+
+		var blocks = codebase.Compile();
+		blocks.Dump("blocks");
 	}
 	public static void TestBuffer() {
 		var l = new LexerState("");
@@ -61,35 +70,66 @@ public static class u {
 }
 
 // Define other methods and classes here
-public enum LineTokenType {
-	BlankLine,
-	Comment,
-	For,
-	If,
-	ElseIf,
-	Else,
-	Switch,
-	Case,
-	Do,
-	Whilie,
-	Struct,
-	Union,
-	Enum,
-	Class,
-	Namespace,
-	Initializer,
-	Macro,
-	Include,
-	Ifdef,
-	Ifndef,
-	Def,
-	UnDef,
-	EndIf
+public enum BasicType {
+	Void,
+	Int8,UInt8,Int16,UInt16,Int32,UInt32,Int64,UInt64,
+	Char,WChar,
+	Bool,Boolean,
+	Float,Double
 }
 
-public class LineToken {
+public enum IdentifierType {
+	FunctionName,
+	ArrayName,
+	VariableName,
+	ClassName,
+	StructName,
+	UnionName,
+	NamespaceName,
+}
+
+public enum KeywordType {
+	Asm,Auto,
+	If, ElseIf, Else,
+	Switch, Case, Default, Break,
+	Do, Whilie, For,
+	Struct, Union, Enum, Class, Namespace,
+	Include,
+	Define, MacroNewLine,
+	Ifdef, Ifndef, Def, UnDef, EndIf,
+	TypeDef,
+	Static,Public,Private,Protected,
+	This,Friend,Virtual,Override,Final,
+	New,Delete,
+	Try,Catch,
+	Return,
+	BasicType,
+	Const,Volatile,Register,
+}
+
+public enum OperatorType {
+	Plus, Minus, Multiply, Div, Mod,
+	BitOr, BitAnd, BitNot, BitXor,
+	Or, And, Not,
+	Less, Equals, Greater,
+	Assign, LeftShift, RightShift,
+	TemplateLeftBracket, TemplateRightBracket,
+	QuestionMark,
+	Inherent, DoubleColons,
+	LeftBlock, RightBlock, LeftParenthesis, RightParenthesis, LeftBracket, RightBracket,
+	Semicolons,
+}
+
+public enum TokenType {
+	Identifier, // Name of functions, arrays, variables,classes
+	Keyword,
+	Constant,
+	Operator
+}
+
+public class Token {
 	public string Value { get; set; }
-	public LineTokenType Type { get; set;}
+	public TokenType Type { get; set;}
 }
 
 public class ControlBlock {
@@ -116,11 +156,11 @@ public class ControlBlock {
         set {
             kind = value;
             if (kind == "struct") {
-                lastScopeAccessor = "public:";
+                lastScopeAccessor = "public :";
             } else if (kind == "class") {
-                lastScopeAccessor = "private:";
+                lastScopeAccessor = "private :";
             } else if (kind == "enum") {
-                lastScopeAccessor = "public:";
+                lastScopeAccessor = "public :";
             }
         }
     }
@@ -163,7 +203,7 @@ public class ControlBlock {
             this.Parent.AddLine(line);
         }
 
-        var accessor = new[] { "public:", "protected:", "private:" };
+        var accessor = new[] { "public :", "protected :", "private :" };
         foreach (var a in accessor) {
             if (line.Trim() == a) {
                 this.lastScopeAccessor = a;
@@ -247,7 +287,7 @@ public class ControlBlock {
         Close = false;
         Prefix = "void";
         Postfix="";
-        Accessor = "public:";
+        Accessor = "public :";
         IsDeclare = false;
         Name = "";
     }
@@ -472,6 +512,10 @@ public class LexerState {
 	public char last = char.MinValue;
 	public bool lastescape = false;
 	public bool enterstr = false;
+	
+	public char SemicolonsChar = ';';
+	public char LastSemicolonsChar = ';';
+	
 }
 
 public class ParserState {
@@ -488,8 +532,8 @@ public class ParserState {
     public LexerState Lexer {
         get;
         private set;
-    }
-
+	}
+	
     public ParserState(LexerState l) {
         Lexer = l;
         Buffers = new List<string>();
@@ -525,7 +569,7 @@ public static class LexerBufferExtension {
 
 	private static LexerState AddLine(this LexerState l, string newLine) {
 		if (!string.IsNullOrWhiteSpace(newLine)) {
-			newLine = newLine.TrimEnd().Replace(' ', '@');
+			//newLine = newLine.TrimEnd().Replace(' ', '@');
 			l.Lines.Add(newLine);
 		}
 		return l;
@@ -641,6 +685,10 @@ public static class LexerBufferExtension {
 		if (l.enterstr) {
 			l.Line.Append(c);
 		} else {
+			if (l.last == '\\'&&c=='\\') {
+				return ;
+			}
+		
 			if (l.last.change(c)) {
 				l.BufferWord();
 			} 
@@ -715,18 +763,40 @@ public static class LexerBufferExtension {
 }
 
 public static class LexerTokenExtension {
+	public static bool CheckSemicolons(this LexerState l) {
+		l.LastSemicolonsChar = l.SemicolonsChar;
+		if (l.SemicolonsChar != ';') {
+			var k = l.next;
+			var cc = char.MinValue;
+			var newLineCount = 0;
+			var s = l.Code.Skip(ref k, c => {
+				if (c.IsNewLine() && !cc.IsNewLine()) {
+					newLineCount++;
+					if (newLineCount == 2) {
+						return false;
+					}
+				}
+				cc = c;
+				return true;
+			});
+
+			if (cc == ';') {
+				l.SemicolonsChar = ';';
+				return true;
+			}
+		}
+		return false;
+	}
 	public static bool PassComment(this LexerState l) {
 		Debug.Assert(l.Current == '/', "ERROR: l.Currnet SHOULD BE '/' .");
 		if (l.next < l.Count) {
 			var nc = l.Code[l.next];
 			if (nc == '/') {
-				//l.Save();
 				int i = l.next + 1;
 				int skipCount = l.Code.SkipSingleLineComment(ref i);
 				l.next += skipCount + 1;
 				return true;
 			} else if (nc == '*') {
-				//l.Save();
 				int i = l.next + 1;
 				int skipCount = l.Code.SkipMultilineComment(ref i);
 				l.next += skipCount + 1;
@@ -747,8 +817,7 @@ public static class LexerTokenExtension {
 		return skipCount > 0;
 	}
 	public static bool PassSemiColons(this LexerState l) {
-		Debug.Assert(l.Current == ';', "ERROR: l.Currnet SHOULD BE ';' .");
-		l.Buffer();
+		Debug.Assert(l.Current == l.SemicolonsChar, "ERROR: l.Currnet SHOULD BE ';' .");
 		l.HasKeyword = false;
 
 		bool skip = false;
@@ -758,7 +827,7 @@ public static class LexerTokenExtension {
 			l.next += skipCount;
 
 			var v = l.PeekChar();
-			if (v == ';') {
+			if (v == l.SemicolonsChar) {
 				l.next++;
 				skip = true;
 			} else {
@@ -766,7 +835,7 @@ public static class LexerTokenExtension {
 				var nskipCount = l.Code.SkipSpaceOrNewLine(ref j);
 				if (nskipCount > 0) {
 					var vv = l.Code.PeekChar(j);
-					if (vv == ';') {
+					if (vv == l.SemicolonsChar) {
 						l.next += nskipCount + 1;
 						skip = true;
 					} else {
@@ -778,18 +847,11 @@ public static class LexerTokenExtension {
 			}
 
 		} while (skip);
-
-		var lookup = l.Peek(1);
-		if (!string.IsNullOrWhiteSpace(lookup)) {
-			if (lookup[0] == '\\') {
-				l.BufferNew('\\');
-				l.next += 1;
-			}
-		}
-
-		l.Current = l.Code[l.next - 1];
-		//l.ShowLine();
+		
+		l.BufferNew(l.SemicolonsChar);
 		l.Save();
+		l.CheckSemicolons();
+
 		return true;
 	}
 	public static bool PassLeftBrace(this LexerState l) {
@@ -805,8 +867,16 @@ public static class LexerTokenExtension {
 			}
 		}
 
+		if (l.LastSemicolonsChar == '\\' || l.SemicolonsChar == '\\') {
+			l.BufferNew('\\');
+		}
 		l.Save();
-		l.SaveNew("{");
+		l.BufferNew("{");
+		
+		if (l.LastSemicolonsChar == '\\' || l.SemicolonsChar == '\\') {
+			l.BufferNew('\\');
+		}
+		l.Save();
 
 		l.LastClassLevels.Push(l.level);
 		l.level++;
@@ -814,6 +884,9 @@ public static class LexerTokenExtension {
 	}
 	public static bool PassRightBrace(this LexerState l) {
 		Debug.Assert(l.Current == '}', "ERROR: l.Currnet SHOULD BE '}' .");
+		if (l.LastSemicolonsChar == '\\' || l.SemicolonsChar == '\\') {
+			l.BufferNew('\\');
+		}
 		l.Save();
 		l.level--;
 		l.HasKeyword = false;
@@ -823,37 +896,34 @@ public static class LexerTokenExtension {
 			}
 		}
 
-		Action peekSemicolons = () => {
-			int i = l.next;
-			int skipCount = l.Code.SkipSpaceOrNewLine(ref i);
-			var nc = l.Code.PeekChar(i);
-			if (nc == ';') {
-				l.BufferNew(nc);
-				l.next += skipCount + 1;
-			}
-		};
-
 		l.BufferNew("}");
-
-		if (!l.EnterTailBlock) {
-			peekSemicolons();
-			l.Save();
-
-		} else {
-			int i = l.next;
-			var skipCount = l.Code.Skip(ref i, cc => {
-				var valid = cc != ';';
+		
+		var i = l.next;
+		var skipCount = 0;
+		if (l.EnterTailBlock) {
+			skipCount += l.Code.Skip(ref i, cc => {
+				var valid = cc != l.SemicolonsChar;
 				if (valid) {
 					l.BufferNew(cc);
 				}
 				return valid;
 			});
-
-			l.next += skipCount;
-			peekSemicolons();
-
-			l.Save();
 		}
+		
+		
+		skipCount += l.Code.SkipSpaceOrNewLine(ref i);
+		var nc = l.Code.PeekChar(i);
+		if (nc == l.SemicolonsChar) {
+			l.BufferNew(nc);
+			skipCount += 1;
+		} 
+		l.next+=skipCount;
+
+		if ((l.LastSemicolonsChar == '\\') || (l.SemicolonsChar == '\\'&&l.LastSemicolonsChar!='\\')) {
+			l.BufferNew('\\');
+		}
+
+		l.Save();
 
 		return true;
 	}
@@ -869,7 +939,6 @@ public static class LexerTokenExtension {
 				var skipValue = r.Item2;
 				var skipCount = r.Item1 + headcount;
 				
-				//l.SaveNew("for{0}", skipValue);
 				l.Save();
 				l.BufferNew("for{0}", skipValue);
 				l.Save();
@@ -966,7 +1035,11 @@ public static class LexerTokenExtension {
 			l.Save();
 
 			l.PushLevel(l.LastClassLevels.Peek());
-			l.SaveNew(r);
+			l.BufferNew(r);
+			if (l.LastSemicolonsChar == '\\' || l.SemicolonsChar == '\\') {
+				l.BufferNew('\\');
+			}
+			l.Save();
 			l.PopLevel();
 
 
@@ -991,8 +1064,16 @@ public static class LexerTokenExtension {
 			return true;
 		}
 
+		if (l.PassLineByHeader("#define ")) {
+			if (l.Lines.Last().Trim().EndsWith("\\")) {
+				l.LastSemicolonsChar = l.SemicolonsChar;
+				l.SemicolonsChar = '\\';
+			}
+			return true;
+		}
+
 		if (l.PassLineByHeader(
-			"#if ", "#ifdef ", "#ifndef ", "#define ",
+			"#if ", "#ifdef ", "#ifndef ",
 			"#error ", "#include ", "#import ", "case ", "default ", "default ")) {
 			return true;
 		}
@@ -1086,7 +1167,7 @@ public static class LexerExtension {
 				}
 			}
 
-			if (l.Current == ';') {
+			if (l.Current == l.SemicolonsChar) {
 				if (!l.PassSemiColons()) {
 					Debug.Assert(false, "ERROR: PassSemiColons Failed.");
 					break;
@@ -1096,7 +1177,7 @@ public static class LexerExtension {
 			}
 
 			if (l.Current.IsNewLine() || l.next == 1) {
-				//l.Current.Dump();
+				l.CheckSemicolons();
 				if (l.PassBlankLines()) {
 					continue;
 				} else {
@@ -1483,447 +1564,9 @@ public static class SkipExtension {
 }
 
 public static class ParserExtension {
-    public static IEnumerable<ControlBlock> Parse(this ParserState p) {
-        var next = p.Lexer.Next();
-        var yieldable = false;
-        foreach (var ll in next) {
-            var line = ll.Replace("XPF_BEGIN_EXTERN_C","");
-            line = line.Replace("XPF_END_EXTERN_C","");
-            
-            p.Current = line;
-            p.LineNumber++;
-
-            if (p.CurrentBlock != null && p.CurrentBlock.Close == false) {
-                p.CurrentBlock.AddLine(line);
-            }
-
-            do {
-                // Block Begin
-                if (p.PassBeginBlock()) {
-                    if (p.BlockStack.Count == 0) {
-                        yieldable = true;
-                    }
-                    break;
-                }
-
-                // Pass NonBlock
-                if (p.CurrentBlock == null) {
-                    break;
-                }
-
-                // Block End
-                if (p.PassEndBlock()) {
-                    if (p.BlockStack.Count == 0) {
-                        yieldable = true;
-                    }
-                    break;
-                }
-            } while (false);
-
-            if (yieldable) {
-                p.CurrentBlock.Update();
-                yield return p.CurrentBlock;
-                p.CurrentBlock = null;
-                yieldable = false;
-            }
-
-            p.Last = line;
-        }
-    }
-    private static bool PassBeginBlock(this ParserState p) {
-        var isBlock = p.Current.Trim() == "{";
-        var isInlineBlock = false;
-        
-        var last = p.Last;
-        var current = p.Current;
-        
-        if (!isBlock) {
-            if (p.CurrentBlock==null||(p.CurrentBlock.IsType()||p.CurrentBlock.IsNamespace())) {
-                var l = p.Current.Trim();
-                if (l.Contains("(")) {
-                    isInlineBlock = l.EndsWith(";");
-                    if (isInlineBlock) {
-                        p.Last = p.Current;
-                        p.Current = null;
-                    }
-                }
-            }
-        }
-        if (isBlock||isInlineBlock) {
-
-            // Create new block
-            var b = new ControlBlock();
-            b.LineStart = p.LineNumber - 1;
-            b.AddLine(p.Last);
-            b.AddLine(p.Current);
-
-
-            // Stack Control Blocks
-            if (p.BlockStack.Count > 0) {
-                var top = p.BlockStack.Peek();
-                b.Parent = top;
-                b.Accessor = b.Parent.LastScopeAccessor;
-                top.Children.Add(b);
-            }
-
-            p.CurrentBlock = b;
-            p.BlockStack.Push(b);
-
-            bool pass = true;
-            do {
-                // xxx_API(r) function(...){}
-                if (p.PassAPI()) {
-                    break;
-                }
-
-                // if(...){} 
-                // else if(){}
-                // else{}
-                // for(...){}
-                // while(...){}
-                // do{ }while(...);
-                // switch(...){}
-                if (p.PassControl()) {
-                    break;
-                }
-
-                // class c:...{}
-                if (p.PassClass()) {
-                    break;
-                }
-
-                // o::c(...){}
-                // ~o::c(...){}
-                if (p.PassCtorAndDtor()) {
-                    break;
-                }
-
-                // r o::m(...){}
-                if (p.PassMethod()) {
-                    break;
-                }
-
-                // {}  
-                pass = false;
-            } while (false);
-
-            // anonymous block
-            if (!pass&&!isInlineBlock) {
-                b.Codes.RemoveAt(0);
-            }
-
-            if (isInlineBlock) {
-                p.CurrentBlock.IsDeclare = true;
-                p.PassEndBlock(true);
-            }
-            p.Last = last;
-            p.Current = current;
-
-            return pass;
-        } else {
-            return false;
-        }
-    }
-    private static bool PassEndBlock(this ParserState p,bool inline=false) {
-        var isEnd = inline;
-        
-        if (!isEnd) {
-            isEnd = p.Current.Contains("}");
-        }
-        
-        if (isEnd) {
-            p.CurrentBlock.LineEnd = p.LineNumber;
-            p.CurrentBlock.Close = true;
-            if ((p.CurrentBlock.Parent == null||p.CurrentBlock.Parent.IsNamespace())&&!p.CurrentBlock.Name.Contains("::")) {
-                if (p.CurrentBlock.Kind == "method") {
-                    p.CurrentBlock.Kind = "function";
-                }
-            }
-
-            if (p.Current!=null&&string.IsNullOrWhiteSpace(p.CurrentBlock.Postfix)) {
-                p.CurrentBlock.Postfix = p.Current.Trim().TrimStart('}');
-            }
-            
-            p.BlockStack.Pop();
-
-            if (p.BlockStack.Count > 0) {
-                p.CurrentBlock = p.BlockStack.Peek();
-            } else {
-                
-            }
-
-            return true;
-        } else {
-            return false;
-        }
-    }
-    private static bool PassAPI(this ParserState p) {
-        var m = new StringBuilder();
-        m
-        .Home()
-        .Space('*')
-        
-        .Char('+').Str("_API")       // API 
-        .Space('*')
-        
-        .L('(')
-        .Space('*')
-        
-        .B().Any('*').E()             // 0. return type
-        .Space('*')
-        
-        .R(')')
-        .Space('+')
-        
-        .B().Char('+').E()             // 1. function name
-        .Space('*')
-        
-        .L('(')
-        .Space('*')
-        
-        .B().Any(@"[^\)\(]",'*').E()   // 2. function arguments
-        .Space('*')
-        
-        .R(')')
-        .Space('*')
-        ;
-
-        var vs = p.Last.ValuesAt(m, 0, 1, 2);
-        if (vs.Count() == 3) {
-            p.CurrentBlock.Kind   = "api";
-            p.CurrentBlock.Prefix = vs.ElementAt(0);
-            p.CurrentBlock.Name   = vs.ElementAt(1);
-            p.CurrentBlock.Fields = vs.ElementAt(2);
-            return true;
-        } else {
-            return false;
-        }
-    }
-    private static bool PassMethod(this ParserState p) {
-        var m = new StringBuilder();
-
-        // split
-        m.Clear();
-        m
-        .BlanceGroup("(", ")", 1, 2);
-        
-        var vs = Regex.Match(p.Last,m.ToString()).Groups.Captures().ToList();
-        if(vs.Count<3) return false;
-        
-        var pre    = vs[1];
-        var middle = vs[2];
-        var post   = vs[3];
-
-        var first = pre.Value;
-        var second = middle.Value.Replace("(","").Replace(")","");
-        var third = post.Value;
-        if (middle.Captures.Count ==2) {
-            first = first+" "+middle.Captures[0].Value.Replace("(","").Replace(")","");
-        }
-
-        // split
-        m.Clear();
-        m
-        .Home()
-        .Space('*')
-
-        .B().Words().E()                       // 0. return type
-        .Space('+')
-
-        .B().Str(@"\S+\s*(::\s*\S+\s*)*").E()   // 1.2 method name
-        .Space('*');
-        
-        var sv = Regex.Match(first,m.ToString()).Groups.Captures().ToList();
-        if(sv.Count<3) return false;
-        
-        p.CurrentBlock.Kind    = "method";
-        p.CurrentBlock.Fields  = second;
-        p.CurrentBlock.Postfix = third;
-        p.CurrentBlock.Prefix = sv[1].Value;
-        p.CurrentBlock.Name   = sv[2].Value;
-
-        return true;
-    }
-    private static bool PassCtorAndDtor(this ParserState p) {
-        var m = new StringBuilder();
-        m
-        .Home()
-        .Space('*')
-        
-        .B().Str(@"~?\w+\s*(::\s*(\w|~)+\s*)*").E()  // 0.1.2 method name
-        .Space('*')
-        
-        .L('(')
-        .Space('*')
-        
-        .B().Any(@"[^\)\(]",'*').E()                // 3. method arguments
-        .Space('*')
-        
-        .R(')')
-        .Space('*')
-        
-        .B().Any('*').E()                           // 4. tail
-        ;
-
-        var vs = p.Last.ValuesAt(m, 0, 1,2, 3, 4);
-
-        if (vs.Count() == 5) {
-            var lookup = vs.ElementAt(0);
-            if (p.CurrentBlock.Parent != null) {
-                if (!lookup.Contains(p.CurrentBlock.Parent.Name)) {
-                    return false;
-                }
-            }
-
-            if (lookup.Contains("~")) {
-                p.CurrentBlock.Kind     = "destructor";
-            } else {
-                p.CurrentBlock.Kind     = "constructor";
-            }
-            p.CurrentBlock.Name = vs.ElementAt(0);
-            p.CurrentBlock.Fields = vs.ElementAt(3);
-            p.CurrentBlock.Postfix = vs.ElementAt(4);
-            
-            return true;
-        } else {
-            return false;
-        }
-        
-    }
-    private static bool PassControl(this ParserState p) {
-        var last = p.Last.Trim();
-
-        var keywords = new[]{
-            "if","else if","else","for","do","while","switch"
-        };
-        
-        string keyword = null;
-        foreach (var k in keywords) {
-            if (last.StartsWith(k)) {
-                keyword = k;
-                break;
-            }
-        }
-
-
-        if (keyword != null) {
-
-            p.CurrentBlock.Kind = "control";
-            p.CurrentBlock.Name = keyword;
-            
-            if (keyword == "else" || keyword == "do") {
-                return true;
-            }
-
-            var m = new StringBuilder();
-            m
-            .Words()           // if else if for do while
-            .Space('*')
-
-            .L('(')
-            .Space('*')
-            
-            .B().Words().E()   // 0. conditions
-            .Space('*')
-            
-            .R(')')
-            .Space('*')
-            ;
-
-            var vs = p.Last.ValuesAt(m, 0);
-
-            if (vs.Count()==1) {
-                p.CurrentBlock.Fields = vs.ElementAt(0);
-                return true;
-            } else {
-                // error
-                return false;
-            }
-        } else {
-            return false;
-        }
-    }
-
-    private static bool PassClass(this ParserState p) {
-
-        if (p.Last.Contains("tagXPFAddressCacheTypeInfo")) {
-            int j=0;
-        }
-        
-        var keywords = new[]{
-            "union","structs","enums","namespace"
-        };
-
-        string keyword = null;
-        foreach (var k in keywords) {
-            if (p.Last.Trim()==k) {
-                keyword = k;
-                break;
-            }
-        }
-
-        if (keyword!=null) {
-            p.CurrentBlock.Kind  =keyword;
-            return true;
-        }
-
-        var tempalte = new[]{
-            "class","struct"
-        };
-
-        var pre = "";
-        var last = p.Last;
-        if (p.Last.Contains("template")) {
-            var second = @"(^\s*template\s*<[^<>]*(((?'Open'<)[^<>]*)+((?'-Open'>)[^<>]*)+)*(?(Open)(?!))>\s*)";
-            var r = Regex.Match(p.Last, second);
-            if (r.Captures.Count > 0) {
-                pre = r.Value;
-                last=p.Last.Substring(pre.Length);
-            }
-        }
-        
-        var m = new StringBuilder();
-        m
-        .Home()
-        .Space('*')
-        
-        .B().Str(@"typedef|\s*").E()                                   // 0. prefix
-        .Space('*')
-        
-        .B().Str("class|struct|enum|namespace|union").E()   // 1. class,struct,enum 
-        .Str(@"[\s\t\r\n]+")
-        
-        .B().Str(@"\S[^:]*").E()                  // 2. name
-        .Space('*')
-        
-        .B().Str(@":?").Any('*').E()                   // 3. postfix: inherit     
-        .Space('*')
-        ;
-
-        var vs = last.ValuesAt(m, 0, 1, 2,3);
-
-        if (last.Contains("namespace")) {
-            int i=0;
-        }
-
-        if (vs.Count() == 4) {
-            if (vs.ElementAt(0).Contains("template")) {
-                "debug".Dump();
-            }
-            p.CurrentBlock.Kind     = vs.ElementAt(1);
-            p.CurrentBlock.Prefix   = pre+vs.ElementAt(0);
-            p.CurrentBlock.Name     = vs.ElementAt(2);
-            p.CurrentBlock.Postfix  = vs.ElementAt(3);
-
-            if (p.CurrentBlock.Name.Contains("ServiceRandomRule")) {
-                int z=0;
-            }
-            
-            return true;
-        } else {
-            return false;
-        }
-    }
+	public static IEnumerable<ControlBlock> Parse(this ParserState p) {
+		yield break;
+	}
 }
 
 public static class PathExtension {
@@ -1936,143 +1579,6 @@ public static class PathExtension {
             yield return path;
         } else {
             yield break;
-        }
-    }
-}
-
-public static class RegexExtension {
-    public static string ValueAt(this string src, StringBuilder pattern, int i) {
-        return src.ValueAt(pattern.ToString(), i);
-    }
-    public static string ValueAt(this string src, string pattern, int i) {
-        Match m = null;
-		try {
-			m = Regex.Match(src, pattern);
-		} catch (Exception e) {
-			var sb = string.Format("{0}/{1}", src, pattern);
-			string.Format("ValueAt Error:{0},\r\nsrc:{1}\r\npattern:{2}", e.Message, src, pattern).Dump("error");
-		}
-		if (m.Captures.Count > 0) {
-			if (m.Groups.Count > i && i > 0) {
-                return m.Groups[i].Value;
-            }
-        } else {
-            int j = 0;
-        }
-        return null;
-    }
-    public static IEnumerable<string> ValuesAt(this string src, StringBuilder pattern, params int[] ia) {
-        return src.ValuesAt(pattern.ToString(), ia);
-    }
-    public static IEnumerable<string> ValuesAt(this string src, string pattern, params int[] ia) {
-        Match m = null;
-        try {
-            m = Regex.Match(src, pattern);
-        } catch(Exception e){
-            var sb = string.Format("{0}/{1}", src, pattern);
-            string.Format("ValuesAt Error:{0},\r\nsrc:{1}\r\npattern:{2}",e.Message,src,pattern).Dump("error");
-        }
-        if (m.Captures.Count > 0) {
-            foreach (var i in ia) {
-                if (m.Groups.Count > i && i >= 0) {
-                    yield return m.Groups[i + 1].Value;
-                }
-            }
-        }
-        yield break;
-    }
-    public static StringBuilder Words(this StringBuilder p) {
-        p.Append(@"\S.*\S");
-        return p;
-    }
-    public static StringBuilder Space(this StringBuilder p, char c) {
-        p.AppendFormat(@"\s{0}", c);
-        return p;
-    }
-    public static StringBuilder Tab(this StringBuilder p, char c) {
-        p.AppendFormat(@"\t{0}", c);
-        return p;
-    }
-    public static StringBuilder Any(this StringBuilder p, char c) {
-        p.AppendFormat(@".{0}", c);
-        return p;
-    }
-    public static StringBuilder Any(this StringBuilder p, string w, char c) {
-        p.AppendFormat(@"{0}{1}", w, c);
-        return p;
-    }
-    public static StringBuilder Char(this StringBuilder p) {
-        p.Append(@"\w");
-        return p;
-    }
-    public static StringBuilder Char(this StringBuilder p, char c) {
-        p.AppendFormat(@"\w{0}", c);
-        return p;
-    }
-    public static StringBuilder Char(this StringBuilder p, char w, char c) {
-        p.AppendFormat(@"{0}{1}", w, c);
-        return p;
-    }
-    public static StringBuilder B(this StringBuilder p) {
-        p.Append(@"(");
-        return p;
-    }
-    public static StringBuilder E(this StringBuilder p) {
-        p.Append(@")");
-        return p;
-    }
-    public static StringBuilder L(this StringBuilder p, char c) {
-        switch (c) {
-            case '}':
-            case ']':
-            case ')':
-                Debug.Assert(false); break;
-            case '(': p.Append(@"\("); break;
-            default: p.Append(c); break;
-        }
-        return p;
-    }
-    public static StringBuilder R(this StringBuilder p, char c) {
-        switch (c) {
-            case '{':
-            case '[':
-            case '(':
-                Debug.Assert(false); break;
-            case ')': p.Append(@"\)"); break;
-            default: p.Append(c); break;
-        }
-        return p;
-    }
-    public static StringBuilder Str(this StringBuilder p, string str) {
-        p.Append(str);
-        return p;
-    }
-    public static StringBuilder Or(this StringBuilder p) {
-        p.Append("|");
-        return p;
-    }
-    public static StringBuilder Home(this StringBuilder p) {
-        p.Append("^");
-        return p;
-    }
-    public static StringBuilder End(this StringBuilder p) {
-        p.Append("$");
-        return p;
-    }
-    public static StringBuilder BlanceGroup(this StringBuilder p, string l, string r, int min, int max) {
-        if (l == "(") l = @"\(";
-        if (r == ")") r = @"\)";
-        var first = @"([^<>]*)";
-        var second = @"(<[^<>]*(((?'Open'<)[^<>]*)+((?'-Open'>)[^<>]*)+)*(?(Open)(?!))>\s*)";
-        var third = @"([^<>]*)";
-        var pp = string.Format(@"{0}\s*{1}{{{2},{3}}}{4}", first, second, min, max, third);
-        p.Append(pp.Replace("<", l).Replace(">", r));
-        return p;
-    }
-    public static IEnumerable<System.Text.RegularExpressions.Group> Captures(this System.Text.RegularExpressions.GroupCollection groups) {
-        for (int i = 0; i < groups.Count; i++) {
-            System.Text.RegularExpressions.Group g = groups[i];
-            if (g.Success) yield return g;
         }
     }
 }
@@ -2144,10 +1650,10 @@ public static class BlockExtension {
                     return;
                 } else {
                     switch (b.Accessor) {
-                        case "public:": cb.PublicBlocks.Add(b); return;
-                        case "protected:": cb.ProtectedBlocks.Add(b); return;
-                        case "private:": cb.PrivateBlocks.Add(b); return;
-                        default: b.Accessor = "public:"; cb.PublicBlocks.Add(b); return;
+                        case "public :": cb.PublicBlocks.Add(b); return;
+                        case "protected :": cb.ProtectedBlocks.Add(b); return;
+                        case "private :": cb.PrivateBlocks.Add(b); return;
+                        default: b.Accessor = "public :"; cb.PublicBlocks.Add(b); return;
                     }
                 }
             default:
@@ -2201,5 +1707,21 @@ public static class BlockExtension {
         }
     }
 }
+
+public static class EnumeratorExtension {
+	public static IEnumerator<T> Skip<T>(this IEnumerator<T> e, int c) {
+		while (c > 0 && e.MoveNext()) {
+			c -= 1;
+		}
+		return e;
+	}
+	public static IEnumerable<T> Take<T>(this IEnumerator<T> e, int c) {
+		while (c > 0 && e.MoveNext()) {
+			yield return e.Current;
+			c -= 1;
+		}
+	}
+}
+
 
 // Define other methods and classes here
